@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/moov-io/ofac"
@@ -71,34 +72,105 @@ var (
 			},
 		}),
 	}
+	idSearcher = &searcher{
+		SDNs: precomputeSDNs([]*ofac.SDN{
+			{
+				EntityID: "22790",
+				SDNName:  "MADURO MOROS, Nicolas",
+				SDNType:  "individual",
+				Program:  "VENEZUELA",
+				Title:    "President of the Bolivarian Republic of Venezuela",
+				Remarks:  "DOB 23 Nov 1962; POB Caracas, Venezuela; citizen Venezuela; Gender Male; Cedula No. 5892464 (Venezuela); President of the Bolivarian Republic of Venezuela.",
+			},
+		}),
+	}
+	dplSearcher = &searcher{
+		DPs: precomputeDPs([]*ofac.DPL{
+			{
+				Name:           "AL NASER WINGS AIRLINES",
+				StreetAddress:  "P.O. BOX 28360",
+				City:           "DUBAI",
+				State:          "",
+				Country:        "AE",
+				PostalCode:     "",
+				EffectiveDate:  "06/05/2019",
+				ExpirationDate: "12/03/2019",
+				StandardOrder:  "Y",
+				LastUpdate:     "2019-06-12",
+				Action:         "FR NOTICE ADDED, TDO RENEWAL, F.R. NOTICE ADDED, TDO RENEWAL ADDED, TDO RENEWAL ADDED, F.R. NOTICE ADDED",
+				FRCitation:     "82 F.R. 61745 12/29/2017,  83F.R. 28801 6/21/2018, 84 F.R. 27233 6/12/2019",
+			},
+			{
+				Name:           "PRESTON JOHN ENGEBRETSON",
+				StreetAddress:  "12725 ROYAL DRIVE",
+				City:           "STAFFORD",
+				State:          "TX",
+				Country:        "US",
+				PostalCode:     "77477",
+				EffectiveDate:  "01/24/2002",
+				ExpirationDate: "01/24/2027",
+				StandardOrder:  "Y",
+				LastUpdate:     "2002-01-28",
+				Action:         "STANDARD ORDER",
+				FRCitation:     "67 F.R. 7354 2/19/02 66 F.R. 48998 9/25/01 62 F.R. 26471 5/14/97 62 F.R. 34688 6/27/97 62 F.R. 60063 11/6/97 63 F.R. 25817 5/11/98 63 F.R. 58707 11/2/98 64 F.R. 23049 4/29/99",
+			},
+		}),
+	}
 )
 
-func TestJaroWrinkler(t *testing.T) {
+func TestJaroWinkler(t *testing.T) {
 	cases := []struct {
 		s1, s2 string
 		match  float64
 	}{
-		{"wei, zhao", "wei, Zhao", 0.950},
+		{"wei, zhao", "wei, Zhao", 0.942},
 		{"WEI, Zhao", "WEI, Zhao", 1.0},
-		// make sure jaroWrinkler is communative
-		{"jane doe", "jan lahore", 0.69},
-		{"jan lahore", "jane doe", 0.69},
+		{"WEI Zhao", "WEI Zhao", 1.0},
+		{strings.ToLower("WEI Zhao"), precompute("WEI, Zhao"), 1.0},
+		// make sure jaroWinkler is communative
+		{"jane doe", "jan lahore", 0.471},
+		{"jan lahore", "jane doe", 0.707},
+		// real world case
+		{"john doe", "paul john", 0.764},
+		{"john doe", "john othername", 0.764},
+		// close match
+		{"jane doe", "jane doe2", 0.971},
+		// real-ish world examples
+		{"kalamity linden", "kala limited", 0.771},
+		{"kala limited", "kalamity linden", 0.771},
+		// examples used in demos / commonly
+		{"nicolas", "nicolas", 1.0},
+		{"nicolas moros maduro", "nicolas maduro", 1.0},
+		{"nicolas maduro", "nicolas moros maduro", 1.0},
 		// example cases
+		{"nicolas maduro", "nicolas maduro", 1.0},
+		{"maduro, nicolas", "maduro, nicolas", 1.0},
 		{"maduro moros, nicolas", "maduro moros, nicolas", 1.0},
-		{"maduro moros, nicolas", "nicolas maduro", 0.512},
-		{"nicolas maduro moros", "nicolás maduro", 0.855},
-		{"nicolas, maduro moros", "nicolas maduro", 0.891},
-		{"nicolas, maduro moros", "nicolás maduro", 0.881},
+		{"maduro moros, nicolas", "nicolas maduro", 1.0},
+		{"nicolas maduro moros", "nicolás maduro", 0.961},
+		{"nicolas, maduro moros", "nicolas maduro", 0.988},
+		{"nicolas, maduro moros", "nicolás maduro", 0.950},
 	}
+	for i := range cases {
+		v := cases[i]
+		// Only need to call chomp on s1, see jaroWinkler doc
+		eql(t, fmt.Sprintf("#%d %s vs %s", i, v.s1, v.s2), jaroWinkler(v.s1, v.s2), v.match)
+	}
+}
 
-	for _, v := range cases {
-		// Only need to call chomp on s1, see jaroWrinkler doc
-		eql(t, fmt.Sprintf("%s vs %s", v.s1, v.s2), jaroWrinkler(chomp(v.s1), v.s2), v.match)
-	}
+func TestJaroWinklerErr(t *testing.T) {
+	v := jaroWinkler("", "hello")
+	eql(t, "NaN #1", v, 0.0)
+
+	v = jaroWinkler("hello", "")
+	eql(t, "NaN #1", v, 0.0)
 }
 
 func eql(t *testing.T, desc string, x, y float64) {
 	t.Helper()
+	if math.IsNaN(x) || math.IsNaN(y) {
+		t.Fatalf("%s: x=%.2f y=%.2f", desc, x, y)
+	}
 	if math.Abs(x-y) > 0.01 {
 		t.Errorf("%s: %.3f != %.3f", desc, x, y)
 	}
@@ -115,9 +187,9 @@ func TestSearch_precompute(t *testing.T) {
 	cases := []struct {
 		input, expected string
 	}{
-		{"nicolás maduro", "nicolasmaduro"},
-		{"Delcy Rodríguez", "delcyrodriguez"},
-		{"Raúl Castro", "raulcastro"},
+		{"nicolás maduro", "nicolas maduro"},
+		{"Delcy Rodríguez", "delcy rodriguez"},
+		{"Raúl Castro", "raul castro"},
 	}
 	for i := range cases {
 		guess := precompute(cases[i].input)
@@ -131,11 +203,16 @@ func TestSearch_reorderSDNName(t *testing.T) {
 	cases := []struct {
 		input, expected string
 	}{
-		{"Jane Doe", "Jane Doe"},                         // control
-		{"Jane, Doe Other", "Jane, Doe Other"},           // made up name to make sure we don't clobber ,'s in the middle of a name
+		{"Jane Doe", "Jane Doe"}, // no change, control (without commas)
+		{"Doe Other, Jane", "Jane Doe Other"},
+		{"Last, First Middle", "First Middle Last"},
 		{"FELIX B. MADURO S.A.", "FELIX B. MADURO S.A."}, // keep .'s in a name
 		{"MADURO MOROS, Nicolas", "Nicolas MADURO MOROS"},
 		{"IBRAHIM, Sadr", "Sadr IBRAHIM"},
+		{"AL ZAWAHIRI, Dr. Ayman", "Dr. Ayman AL ZAWAHIRI"},
+		// Issue 115
+		{"Bush, George W", "George W Bush"},
+		{"RIZO MORENO, Jorge Luis", "Jorge Luis RIZO MORENO"},
 	}
 	for i := range cases {
 		guess := reorderSDNName(cases[i].input, "individual")
@@ -154,7 +231,7 @@ func TestSearch_liveData(t *testing.T) {
 	searcher := &searcher{
 		logger: log.NewNopLogger(),
 	}
-	if stats, err := searcher.refreshData(); err != nil {
+	if stats, err := searcher.refreshData(""); err != nil {
 		t.Fatal(err)
 	} else {
 		searcher.logger.Log("liveData", fmt.Sprintf("stats: %#v", stats))
@@ -164,7 +241,8 @@ func TestSearch_liveData(t *testing.T) {
 		name  string
 		match float64 // top match %
 	}{
-		{"Nicolas MADURO", 0.944},
+		{"Nicolas MADURO", 1.0},
+		{"nicolas maduro", 1.0},
 	}
 	for i := range cases {
 		sdns := searcher.TopSDNs(1, cases[i].name)
@@ -178,7 +256,7 @@ func TestSearch_liveData(t *testing.T) {
 func TestSearch__topAddressesAddress(t *testing.T) {
 	it := topAddressesAddress("needle")(&Address{address: "needleee"})
 
-	eql(t, "topAddressesAddress", it.weight, 0.95)
+	eql(t, "topAddressesAddress", it.weight, 0.950)
 	if add, ok := it.value.(*Address); !ok || add.address != "needleee" {
 		t.Errorf("got %#v", add)
 	}
@@ -187,7 +265,7 @@ func TestSearch__topAddressesAddress(t *testing.T) {
 func TestSearch__topAddressesCountry(t *testing.T) {
 	it := topAddressesAddress("needle")(&Address{address: "needleee"})
 
-	eql(t, "topAddressesCountry", it.weight, 0.95)
+	eql(t, "topAddressesCountry", it.weight, 0.950)
 	if add, ok := it.value.(*Address); !ok || add.address != "needleee" {
 		t.Errorf("got %#v", add)
 	}
@@ -199,7 +277,7 @@ func TestSearch__multiAddressCompare(t *testing.T) {
 		topAddressesCountry("other"),
 	)(&Address{address: "needlee", country: "other"})
 
-	eql(t, "multiAddressCompare", it.weight, 0.9857)
+	eql(t, "multiAddressCompare", it.weight, 0.986)
 	if add, ok := it.value.(*Address); !ok || add.address != "needlee" || add.country != "other" {
 		t.Errorf("got %#v", add)
 	}
@@ -327,11 +405,53 @@ func TestSearch__FindSDN(t *testing.T) {
 }
 
 func TestSearch__TopSDNs(t *testing.T) {
-	sdns := sdnSearcher.TopSDNs(1, "AL ZAWAHIRI")
+	sdns := sdnSearcher.TopSDNs(1, "Ayman ZAWAHIRI")
 	if len(sdns) == 0 {
 		t.Fatal("empty SDNs")
 	}
 	if sdns[0].EntityID != "2676" {
 		t.Errorf("%#v", sdns[0].SDN)
+	}
+}
+
+func TestSearch__TopDPs(t *testing.T) {
+	dps := dplSearcher.TopDPs(1, "NASER AIRLINES")
+	if len(dps) == 0 {
+		t.Fatal("empty DPs")
+	}
+	// DPL doesn't have any entity IDs. Comparing expected address components instead
+	if dps[0].DeniedPerson.StreetAddress != "P.O. BOX 28360" || dps[0].DeniedPerson.City != "DUBAI" {
+		t.Errorf("%#v", dps[0].DeniedPerson)
+	}
+}
+
+func TestSearch__extractIDFromRemark(t *testing.T) {
+	cases := []struct {
+		input, expected string
+	}{
+		{"Cedula No. 10517860 (Venezuela);", "10517860"},
+		{"National ID No. 22095919778 (Norway).", "22095919778"},
+		{"Driver's License No. 180839 (Mexico);", "180839"},
+		{"Immigration No. A38839964 (United States).", "A38839964"},
+		{"C.R. No. 79190 (United Arab Emirates).", "79190"},
+		{"Electoral Registry No. RZZVAL62051010M200 (Mexico).", "RZZVAL62051010M200"},
+		{"Trade License No. GE0426505 (Italy).", "GE0426505"},
+		{"Public Security and Immigration No. 98.805", "98.805"},
+		{"Folio Mercantil No. 578349 (Panama).", "578349"},
+		{"Trade License No. C 37422 (Malta).", "C 37422"},
+		{"Moroccan Personal ID No. E 427689 (Morocco) issued 20 Mar 2001.", "E 427689"},
+		{"National ID No. 5-5715-00025-50-6 (Thailand);", "5-5715-00025-50-6"},
+		{"Trade License No. HRB94311.", "HRB94311"},
+		{"Registered Charity No. 1040094.", "1040094"},
+		{"Bosnian Personal ID No. 1005967953038;", "1005967953038"},
+		{"Telephone No. 009613679153;", "009613679153"},
+		{"Tax ID No. AABA 670850 Y.", "AABA 670850"},
+		{"Phone No. 263-4-486946; Fax No. 263-4-487261.", "263-4-486946"},
+	}
+	for i := range cases {
+		result := extractIDFromRemark(cases[i].input)
+		if cases[i].expected != result {
+			t.Errorf("input=%s expected=%s result=%s", cases[i].input, cases[i].expected, result)
+		}
 	}
 }

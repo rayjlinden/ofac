@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -20,15 +21,17 @@ import (
 	moovhttp "github.com/moov-io/base/http"
 	"github.com/moov-io/base/http/bind"
 	"github.com/moov-io/ofac"
+	"github.com/moov-io/ofac/internal/database"
 
 	"github.com/go-kit/kit/log"
 	"github.com/gorilla/mux"
-	"github.com/mattn/go-sqlite3"
 )
 
 var (
 	httpAddr  = flag.String("http.addr", bind.HTTP("ofac"), "HTTP listen address")
 	adminAddr = flag.String("admin.addr", bind.Admin("ofac"), "Admin HTTP listen address")
+
+	flagBasePath = flag.String("base-path", "/", "Base path to serve HTTP routes and webui from")
 
 	flagLogFormat = flag.String("log.format", "", "Format for log lines (Options: json, plain")
 
@@ -39,6 +42,9 @@ func main() {
 	flag.Parse()
 
 	var logger log.Logger
+	if v := os.Getenv("LOG_FORMAT"); v != "" {
+		*flagLogFormat = v
+	}
 	if strings.ToLower(*flagLogFormat) == "json" {
 		logger = log.NewJSONLogger(os.Stderr)
 	} else {
@@ -58,16 +64,9 @@ func main() {
 		errs <- fmt.Errorf("%s", <-c)
 	}()
 
-	// Setup SQLite database
-	if sqliteVersion, _, _ := sqlite3.Version(); sqliteVersion != "" {
-		logger.Log("main", fmt.Sprintf("sqlite version %s", sqliteVersion))
-	}
-	db, err := createSqliteConnection(logger, getSqlitePath())
+	// Setup database connection
+	db, err := database.New(logger, os.Getenv("DATABASE_TYPE"))
 	if err != nil {
-		logger.Log("main", err)
-		os.Exit(1)
-	}
-	if err := migrate(logger, db); err != nil {
 		logger.Log("main", err)
 		os.Exit(1)
 	}
@@ -78,7 +77,10 @@ func main() {
 	}()
 
 	// Setup business HTTP routes
-	router := mux.NewRouter()
+	if v := os.Getenv("BASE_PATH"); v != "" {
+		*flagBasePath = v
+	}
+	router := mux.NewRouter().PathPrefix(*flagBasePath).Subrouter()
 	moovhttp.AddCORSHandler(router)
 	addPingRoute(router)
 
@@ -86,6 +88,11 @@ func main() {
 	readTimeout, _ := time.ParseDuration("30s")
 	writTimeout, _ := time.ParseDuration("30s")
 	idleTimeout, _ := time.ParseDuration("60s")
+
+	// Check to see if our -http.addr flag has been overridden
+	if v := os.Getenv("HTTP_BIND_ADDRESS"); v != "" {
+		*httpAddr = v
+	}
 
 	serve := &http.Server{
 		Addr:    *httpAddr,
@@ -105,6 +112,11 @@ func main() {
 		}
 	}
 
+	// Check to see if our -admin.addr flag has been overridden
+	if v := os.Getenv("HTTP_ADMIN_BIND_ADDRESS"); v != "" {
+		*adminAddr = v
+	}
+
 	// Start Admin server (with Prometheus metrics)
 	adminServer := admin.NewServer(*adminAddr)
 	go func() {
@@ -121,16 +133,18 @@ func main() {
 	downloadRepo := &sqliteDownloadRepository{db, logger}
 	defer downloadRepo.close()
 
-	// Start our searcher (and downloader)
-	searcher := &searcher{
-		logger: logger,
-	}
-	if stats, err := searcher.refreshData(); err != nil {
+	searcher := &searcher{logger: logger}
+
+	// Add manual OFAC data refresh endpoint
+	adminServer.AddHandler(manualRefreshPath, manualRefreshHandler(logger, searcher, downloadRepo))
+
+	// Initial download of OFAC data
+	if stats, err := searcher.refreshData(os.Getenv("INITIAL_DATA_DIRECTORY")); err != nil {
 		logger.Log("main", fmt.Sprintf("ERROR: failed to download/parse initial OFAC data: %v", err))
 		os.Exit(1)
 	} else {
 		downloadRepo.recordStats(stats)
-		logger.Log("main", fmt.Sprintf("OFAC data refreshed - Addresses=%d AltNames=%d SDNs=%d", stats.Addresses, stats.Alts, stats.SDNs))
+		logger.Log("main", fmt.Sprintf("OFAC data refreshed - Addresses=%d AltNames=%d SDNs=%d DeniedPersons=%d", stats.Addresses, stats.Alts, stats.SDNs, stats.DeniedPersons))
 	}
 
 	// Setup Watch and Webhook database wrapper
@@ -140,9 +154,9 @@ func main() {
 	defer webhookRepo.close()
 
 	// Setup company / customer repositories
-	companyRepo := &sqliteCompanyRepository{db}
+	companyRepo := &sqliteCompanyRepository{db, logger}
 	defer companyRepo.close()
-	custRepo := &sqliteCustomerRepository{db}
+	custRepo := &sqliteCustomerRepository{db, logger}
 	defer custRepo.close()
 
 	// Setup periodic download and re-search
@@ -151,22 +165,30 @@ func main() {
 	go searcher.periodicDataRefresh(ofacDataRefreshInterval, downloadRepo, updates)
 	go searcher.spawnResearching(logger, companyRepo, custRepo, watchRepo, webhookRepo, updates)
 
-	// Add manual OFAC data refresh endpoint
-	adminServer.AddHandler(manualRefreshPath, manualRefreshHandler(logger, searcher, downloadRepo))
-
 	// Add searcher for HTTP routes
 	addCompanyRoutes(logger, router, searcher, companyRepo, watchRepo)
 	addCustomerRoutes(logger, router, searcher, custRepo, watchRepo)
 	addSDNRoutes(logger, router, searcher)
 	addSearchRoutes(logger, router, searcher)
 	addDownloadRoutes(logger, router, downloadRepo)
+	addValuesRoutes(logger, router, searcher)
+
+	// Setup our web UI to be served as well
+	setupWebui(logger, router, *flagBasePath)
 
 	// Start business logic HTTP server
 	go func() {
-		logger.Log("transport", "HTTP", "addr", *httpAddr)
-		errs <- serve.ListenAndServe()
-		// TODO(adam): support TLS
-		// func (srv *Server) ListenAndServeTLS(certFile, keyFile string) error
+		if certFile, keyFile := os.Getenv("HTTPS_CERT_FILE"), os.Getenv("HTTPS_KEY_FILE"); certFile != "" && keyFile != "" {
+			logger.Log("startup", fmt.Sprintf("binding to %s for secure HTTP server", *httpAddr))
+			if err := serve.ListenAndServeTLS(certFile, keyFile); err != nil {
+				logger.Log("exit", err)
+			}
+		} else {
+			logger.Log("startup", fmt.Sprintf("binding to %s for HTTP server", *httpAddr))
+			if err := serve.ListenAndServe(); err != nil {
+				logger.Log("exit", err)
+			}
+		}
 	}()
 
 	// Block/Wait for an error
@@ -185,16 +207,31 @@ func addPingRoute(r *mux.Router) {
 	})
 }
 
+// getOFACRefreshInterval returns a time.Duration for how often OFAC should refresh data
+//
 // env is the value from an environmental variable
 func getOFACRefreshInterval(logger log.Logger, env string) time.Duration {
 	if env != "" {
-		dur, _ := time.ParseDuration(env)
-		if dur > 0 {
-			if logger != nil {
-				logger.Log("main", fmt.Sprintf("Setting OFAC data refresh interval to %v", dur))
-			}
+		if strings.EqualFold(env, "off") {
+			return 0 * time.Second
+		}
+		if dur, _ := time.ParseDuration(env); dur > 0 {
+			logger.Log("main", fmt.Sprintf("Setting OFAC data refresh interval to %v", dur))
 			return dur
 		}
 	}
+	logger.Log("main", fmt.Sprintf("Setting OFAC data refresh interval to %v (default)", ofacDataRefreshInterval))
 	return ofacDataRefreshInterval
+}
+
+func setupWebui(logger log.Logger, r *mux.Router, basePath string) {
+	dir := os.Getenv("WEB_ROOT")
+	if dir == "" {
+		dir = filepath.Join("webui", "build")
+	}
+	if _, err := os.Stat(dir); err != nil {
+		logger.Log("main", fmt.Sprintf("problem with webui=%s: %v", dir, err))
+		os.Exit(1)
+	}
+	r.PathPrefix("/").Handler(http.StripPrefix(basePath, http.FileServer(http.Dir(dir))))
 }

@@ -5,29 +5,31 @@ All URIs are relative to *http://localhost:8084*
 Method | HTTP request | Description
 ------------- | ------------- | -------------
 [**AddOFACCompanyNameWatch**](OFACApi.md#AddOFACCompanyNameWatch) | **Post** /companies/watch | Add company watch by name. The match percentage will be included in the webhook&#39;s JSON payload.
-[**AddOFACCompanyWatch**](OFACApi.md#AddOFACCompanyWatch) | **Post** /companies/{companyId}/watch | Add OFAC watch on a Company
+[**AddOFACCompanyWatch**](OFACApi.md#AddOFACCompanyWatch) | **Post** /companies/{companyID}/watch | Add OFAC watch on a Company
 [**AddOFACCustomerNameWatch**](OFACApi.md#AddOFACCustomerNameWatch) | **Post** /customers/watch | Add customer watch by name. The match percentage will be included in the webhook&#39;s JSON payload.
-[**AddOFACCustomerWatch**](OFACApi.md#AddOFACCustomerWatch) | **Post** /customers/{customerId}/watch | Add OFAC watch on a Customer
+[**AddOFACCustomerWatch**](OFACApi.md#AddOFACCustomerWatch) | **Post** /customers/{customerID}/watch | Add OFAC watch on a Customer
 [**GetLatestDownloads**](OFACApi.md#GetLatestDownloads) | **Get** /downloads | Return list of recent downloads of OFAC data
-[**GetOFACCompany**](OFACApi.md#GetOFACCompany) | **Get** /companies/{companyId} | Get information about a company, trust or organization such as addresses, alternate names, and remarks.
-[**GetOFACCustomer**](OFACApi.md#GetOFACCustomer) | **Get** /customers/{customerId} | Get information about a customer, addresses, alternate names, and their SDN metadata.
-[**GetSDN**](OFACApi.md#GetSDN) | **Get** /sdn/{sdnId} | Specially designated national
-[**GetSDNAddresses**](OFACApi.md#GetSDNAddresses) | **Get** /sdn/{sdnId}/addresses | Get addresses for a given SDN
-[**GetSDNAltNames**](OFACApi.md#GetSDNAltNames) | **Get** /sdn/{sdnId}/alts | Get alternate names for a given SDN
+[**GetOFACCompany**](OFACApi.md#GetOFACCompany) | **Get** /companies/{companyID} | Get information about a company, trust or organization such as addresses, alternate names, and remarks.
+[**GetOFACCustomer**](OFACApi.md#GetOFACCustomer) | **Get** /customers/{customerID} | Get information about a customer, addresses, alternate names, and their SDN metadata.
+[**GetSDN**](OFACApi.md#GetSDN) | **Get** /sdn/{sdnID} | Specially designated national
+[**GetSDNAddresses**](OFACApi.md#GetSDNAddresses) | **Get** /sdn/{sdnID}/addresses | Get addresses for a given SDN
+[**GetSDNAltNames**](OFACApi.md#GetSDNAltNames) | **Get** /sdn/{sdnID}/alts | Get alternate names for a given SDN
+[**GetUIValues**](OFACApi.md#GetUIValues) | **Get** /ui/values/{key} | Return an ordered distinct list of keys for an SDN property.
 [**Ping**](OFACApi.md#Ping) | **Get** /ping | Ping the OFAC service to check if running
-[**RemoveOFACCompanyNameWatch**](OFACApi.md#RemoveOFACCompanyNameWatch) | **Delete** /companies/watch/{watchId} | Remove a Company name watch
-[**RemoveOFACCompanyWatch**](OFACApi.md#RemoveOFACCompanyWatch) | **Delete** /companies/{companyId}/watch/{watchId} | Remove company watch
-[**RemoveOFACCustomerNameWatch**](OFACApi.md#RemoveOFACCustomerNameWatch) | **Delete** /customers/watch/{watchId} | Remove a Customer name watch
-[**RemoveOFACCustomerWatch**](OFACApi.md#RemoveOFACCustomerWatch) | **Delete** /customers/{customerId}/watch/{watchId} | Remove customer watch
+[**RemoveOFACCompanyNameWatch**](OFACApi.md#RemoveOFACCompanyNameWatch) | **Delete** /companies/watch/{watchID} | Remove a Company name watch
+[**RemoveOFACCompanyWatch**](OFACApi.md#RemoveOFACCompanyWatch) | **Delete** /companies/{companyID}/watch/{watchID} | Remove company watch
+[**RemoveOFACCustomerNameWatch**](OFACApi.md#RemoveOFACCustomerNameWatch) | **Delete** /customers/watch/{watchID} | Remove a Customer name watch
+[**RemoveOFACCustomerWatch**](OFACApi.md#RemoveOFACCustomerWatch) | **Delete** /customers/{customerID}/watch/{watchID} | Remove customer watch
 [**Search**](OFACApi.md#Search) | **Get** /search | Search SDN names and metadata
-[**UpdateOFACCompanyStatus**](OFACApi.md#UpdateOFACCompanyStatus) | **Put** /companies/{companyId} | Update a Companies sanction status to always block or always allow transactions.
-[**UpdateOFACCustomerStatus**](OFACApi.md#UpdateOFACCustomerStatus) | **Put** /customers/{customerId} | Update a Customer&#39;s sanction status to always block or always allow transactions.
+[**UpdateOFACCompanyStatus**](OFACApi.md#UpdateOFACCompanyStatus) | **Put** /companies/{companyID} | Update a Companies sanction status to always block or always allow transactions.
+[**UpdateOFACCustomerStatus**](OFACApi.md#UpdateOFACCustomerStatus) | **Put** /customers/{customerID} | Update a Customer&#39;s sanction status to always block or always allow transactions.
 
 
 
 ## AddOFACCompanyNameWatch
 
 > Watch AddOFACCompanyNameWatch(ctx, name, watchRequest, optional)
+
 Add company watch by name. The match percentage will be included in the webhook's JSON payload.
 
 ### Required Parameters
@@ -49,7 +51,8 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
 
- **xRequestId** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -71,7 +74,8 @@ No authorization required
 
 ## AddOFACCompanyWatch
 
-> Watch AddOFACCompanyWatch(ctx, companyId, watchRequest, optional)
+> Watch AddOFACCompanyWatch(ctx, companyID, watchRequest, optional)
+
 Add OFAC watch on a Company
 
 ### Required Parameters
@@ -80,7 +84,7 @@ Add OFAC watch on a Company
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**companyId** | **string**| Company ID | 
+**companyID** | **string**| Company ID | 
 **watchRequest** | [**WatchRequest**](WatchRequest.md)|  | 
  **optional** | ***AddOFACCompanyWatchOpts** | optional parameters | nil if no parameters
 
@@ -93,7 +97,8 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
 
- **xRequestId** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -116,6 +121,7 @@ No authorization required
 ## AddOFACCustomerNameWatch
 
 > Watch AddOFACCustomerNameWatch(ctx, name, watchRequest, optional)
+
 Add customer watch by name. The match percentage will be included in the webhook's JSON payload.
 
 ### Required Parameters
@@ -137,7 +143,8 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
 
- **xRequestId** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -159,7 +166,8 @@ No authorization required
 
 ## AddOFACCustomerWatch
 
-> Watch AddOFACCustomerWatch(ctx, customerId, watchRequest, optional)
+> Watch AddOFACCustomerWatch(ctx, customerID, watchRequest, optional)
+
 Add OFAC watch on a Customer
 
 ### Required Parameters
@@ -168,7 +176,7 @@ Add OFAC watch on a Customer
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**customerId** | **string**| Customer ID | 
+**customerID** | **string**| Customer ID | 
 **watchRequest** | [**WatchRequest**](WatchRequest.md)|  | 
  **optional** | ***AddOFACCustomerWatchOpts** | optional parameters | nil if no parameters
 
@@ -181,7 +189,8 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
 
- **xRequestId** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -204,6 +213,7 @@ No authorization required
 ## GetLatestDownloads
 
 > []Download GetLatestDownloads(ctx, optional)
+
 Return list of recent downloads of OFAC data
 
 ### Required Parameters
@@ -221,6 +231,8 @@ Optional parameters are passed through a pointer to a GetLatestDownloadsOpts str
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
+ **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xUserID** | **optional.String**| Optional User ID used to perform this search | 
  **limit** | **optional.Int32**| Maximum results returned by a search | 
 
 ### Return type
@@ -243,7 +255,8 @@ No authorization required
 
 ## GetOFACCompany
 
-> OfacCompany GetOFACCompany(ctx, companyId, optional)
+> OfacCompany GetOFACCompany(ctx, companyID, optional)
+
 Get information about a company, trust or organization such as addresses, alternate names, and remarks.
 
 ### Required Parameters
@@ -252,7 +265,7 @@ Get information about a company, trust or organization such as addresses, altern
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**companyId** | **string**| Company ID | 
+**companyID** | **string**| Company ID | 
  **optional** | ***GetOFACCompanyOpts** | optional parameters | nil if no parameters
 
 ### Optional Parameters
@@ -263,7 +276,8 @@ Optional parameters are passed through a pointer to a GetOFACCompanyOpts struct
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **xRequestId** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -285,7 +299,8 @@ No authorization required
 
 ## GetOFACCustomer
 
-> OfacCustomer GetOFACCustomer(ctx, customerId, optional)
+> OfacCustomer GetOFACCustomer(ctx, customerID, optional)
+
 Get information about a customer, addresses, alternate names, and their SDN metadata.
 
 ### Required Parameters
@@ -294,7 +309,7 @@ Get information about a customer, addresses, alternate names, and their SDN meta
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**customerId** | **string**| Customer ID | 
+**customerID** | **string**| Customer ID | 
  **optional** | ***GetOFACCustomerOpts** | optional parameters | nil if no parameters
 
 ### Optional Parameters
@@ -305,7 +320,8 @@ Optional parameters are passed through a pointer to a GetOFACCustomerOpts struct
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **xRequestId** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -327,7 +343,8 @@ No authorization required
 
 ## GetSDN
 
-> Sdn GetSDN(ctx, sdnId, optional)
+> Sdn GetSDN(ctx, sdnID, optional)
+
 Specially designated national
 
 ### Required Parameters
@@ -336,7 +353,7 @@ Specially designated national
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**sdnId** | **string**| SDN ID | 
+**sdnID** | **string**| SDN ID | 
  **optional** | ***GetSDNOpts** | optional parameters | nil if no parameters
 
 ### Optional Parameters
@@ -347,7 +364,8 @@ Optional parameters are passed through a pointer to a GetSDNOpts struct
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **xRequestId** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -369,7 +387,8 @@ No authorization required
 
 ## GetSDNAddresses
 
-> []Address GetSDNAddresses(ctx, sdnId, optional)
+> []EntityAddress GetSDNAddresses(ctx, sdnID, optional)
+
 Get addresses for a given SDN
 
 ### Required Parameters
@@ -378,7 +397,7 @@ Get addresses for a given SDN
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**sdnId** | **string**| SDN ID | 
+**sdnID** | **string**| SDN ID | 
  **optional** | ***GetSDNAddressesOpts** | optional parameters | nil if no parameters
 
 ### Optional Parameters
@@ -389,11 +408,12 @@ Optional parameters are passed through a pointer to a GetSDNAddressesOpts struct
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **xRequestId** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
-[**[]Address**](Address.md)
+[**[]EntityAddress**](EntityAddress.md)
 
 ### Authorization
 
@@ -411,7 +431,8 @@ No authorization required
 
 ## GetSDNAltNames
 
-> []Alt GetSDNAltNames(ctx, sdnId, optional)
+> []Alt GetSDNAltNames(ctx, sdnID, optional)
+
 Get alternate names for a given SDN
 
 ### Required Parameters
@@ -420,7 +441,7 @@ Get alternate names for a given SDN
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**sdnId** | **string**| SDN ID | 
+**sdnID** | **string**| SDN ID | 
  **optional** | ***GetSDNAltNamesOpts** | optional parameters | nil if no parameters
 
 ### Optional Parameters
@@ -431,7 +452,8 @@ Optional parameters are passed through a pointer to a GetSDNAltNamesOpts struct
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **xRequestId** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -451,9 +473,53 @@ No authorization required
 [[Back to README]](../README.md)
 
 
+## GetUIValues
+
+> []string GetUIValues(ctx, key, optional)
+
+Return an ordered distinct list of keys for an SDN property.
+
+### Required Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**key** | **string**| SDN property to lookup | 
+ **optional** | ***GetUIValuesOpts** | optional parameters | nil if no parameters
+
+### Optional Parameters
+
+Optional parameters are passed through a pointer to a GetUIValuesOpts struct
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+ **limit** | **optional.Int32**| Maximum results returned by a search | 
+
+### Return type
+
+**[]string**
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
 ## Ping
 
 > Ping(ctx, )
+
 Ping the OFAC service to check if running
 
 ### Required Parameters
@@ -480,7 +546,8 @@ No authorization required
 
 ## RemoveOFACCompanyNameWatch
 
-> RemoveOFACCompanyNameWatch(ctx, watchId, name, optional)
+> RemoveOFACCompanyNameWatch(ctx, watchID, name, optional)
+
 Remove a Company name watch
 
 ### Required Parameters
@@ -489,7 +556,7 @@ Remove a Company name watch
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**watchId** | **string**| Watch ID, used to identify a specific watch | 
+**watchID** | **string**| Watch ID, used to identify a specific watch | 
 **name** | **string**| Company name watch | 
  **optional** | ***RemoveOFACCompanyNameWatchOpts** | optional parameters | nil if no parameters
 
@@ -502,7 +569,8 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
 
- **xRequestId** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -524,7 +592,8 @@ No authorization required
 
 ## RemoveOFACCompanyWatch
 
-> RemoveOFACCompanyWatch(ctx, companyId, watchId, optional)
+> RemoveOFACCompanyWatch(ctx, companyID, watchID, optional)
+
 Remove company watch
 
 ### Required Parameters
@@ -533,8 +602,8 @@ Remove company watch
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**companyId** | **string**| Company ID | 
-**watchId** | **string**| Watch ID, used to identify a specific watch | 
+**companyID** | **string**| Company ID | 
+**watchID** | **string**| Watch ID, used to identify a specific watch | 
  **optional** | ***RemoveOFACCompanyWatchOpts** | optional parameters | nil if no parameters
 
 ### Optional Parameters
@@ -546,7 +615,8 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
 
- **xRequestId** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -568,7 +638,8 @@ No authorization required
 
 ## RemoveOFACCustomerNameWatch
 
-> RemoveOFACCustomerNameWatch(ctx, watchId, name, optional)
+> RemoveOFACCustomerNameWatch(ctx, watchID, name, optional)
+
 Remove a Customer name watch
 
 ### Required Parameters
@@ -577,7 +648,7 @@ Remove a Customer name watch
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**watchId** | **string**| Watch ID, used to identify a specific watch | 
+**watchID** | **string**| Watch ID, used to identify a specific watch | 
 **name** | **string**| Customer or Company name watch | 
  **optional** | ***RemoveOFACCustomerNameWatchOpts** | optional parameters | nil if no parameters
 
@@ -590,7 +661,8 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
 
- **xRequestId** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -612,7 +684,8 @@ No authorization required
 
 ## RemoveOFACCustomerWatch
 
-> RemoveOFACCustomerWatch(ctx, customerId, watchId, optional)
+> RemoveOFACCustomerWatch(ctx, customerID, watchID, optional)
+
 Remove customer watch
 
 ### Required Parameters
@@ -621,8 +694,8 @@ Remove customer watch
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**customerId** | **string**| Customer ID | 
-**watchId** | **string**| Watch ID, used to identify a specific watch | 
+**customerID** | **string**| Customer ID | 
+**watchID** | **string**| Watch ID, used to identify a specific watch | 
  **optional** | ***RemoveOFACCustomerWatchOpts** | optional parameters | nil if no parameters
 
 ### Optional Parameters
@@ -634,7 +707,8 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
 
- **xRequestId** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -657,6 +731,7 @@ No authorization required
 ## Search
 
 > Search Search(ctx, optional)
+
 Search SDN names and metadata
 
 ### Required Parameters
@@ -674,7 +749,8 @@ Optional parameters are passed through a pointer to a SearchOpts struct
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **xRequestId** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xUserID** | **optional.String**| Optional User ID used to perform this search | 
  **q** | **optional.String**| Search across Name, Alt Names, and Address fields for all SDN entries. Entries may be returned in all response sub-objects. | 
  **name** | **optional.String**| Name which could correspond to a human on the SDN list. Only SDN results will be returned. | 
  **address** | **optional.String**| Phsical address which could correspond to a human on the SDN list. Only Address results will be returned. | 
@@ -684,7 +760,10 @@ Name | Type | Description  | Notes
  **zip** | **optional.String**| Zip code as desginated by SDN guidelines. Only Address results will be returned. | 
  **country** | **optional.String**| Country name as desginated by SDN guidelines. Only Address results will be returned. | 
  **altName** | **optional.String**| Alternate name which could correspond to a human on the SDN list. Only Alt name results will be returned. | 
+ **id** | **optional.String**| ID value often found in remarks property of an SDN. Takes the form of &#39;No. NNNNN&#39; as an alphanumeric value. | 
  **limit** | **optional.Int32**| Maximum results returned by a search | 
+ **sdnType** | **optional.String**| Optional filter to only return SDNs whose type case-insensitively matches | 
+ **program** | **optional.String**| Optional filter to only return SDNs whose program case-insensitively matches | 
 
 ### Return type
 
@@ -706,7 +785,8 @@ No authorization required
 
 ## UpdateOFACCompanyStatus
 
-> UpdateOFACCompanyStatus(ctx, companyId, updateCompanyStatus, optional)
+> UpdateOFACCompanyStatus(ctx, companyID, updateCompanyStatus, optional)
+
 Update a Companies sanction status to always block or always allow transactions.
 
 ### Required Parameters
@@ -715,7 +795,7 @@ Update a Companies sanction status to always block or always allow transactions.
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**companyId** | **string**| Company ID | 
+**companyID** | **string**| Company ID | 
 **updateCompanyStatus** | [**UpdateCompanyStatus**](UpdateCompanyStatus.md)|  | 
  **optional** | ***UpdateOFACCompanyStatusOpts** | optional parameters | nil if no parameters
 
@@ -728,7 +808,8 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
 
- **xRequestId** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -750,7 +831,8 @@ No authorization required
 
 ## UpdateOFACCustomerStatus
 
-> UpdateOFACCustomerStatus(ctx, customerId, updateCustomerStatus, optional)
+> UpdateOFACCustomerStatus(ctx, customerID, updateCustomerStatus, optional)
+
 Update a Customer's sanction status to always block or always allow transactions.
 
 ### Required Parameters
@@ -759,7 +841,7 @@ Update a Customer's sanction status to always block or always allow transactions
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**customerId** | **string**| Customer ID | 
+**customerID** | **string**| Customer ID | 
 **updateCustomerStatus** | [**UpdateCustomerStatus**](UpdateCustomerStatus.md)|  | 
  **optional** | ***UpdateOFACCustomerStatusOpts** | optional parameters | nil if no parameters
 
@@ -772,7 +854,8 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
 
- **xRequestId** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
+ **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 

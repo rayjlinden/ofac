@@ -3,10 +3,14 @@ VERSION := $(shell grep -Eo '(v[0-9]+[\.][0-9]+[\.][0-9]+(-[a-zA-Z0-9]*)?)' vers
 
 .PHONY: build build-server build-examples docker release check
 
-build: check build-server build-ofactest build-examples
+build: check build-server build-ofaccheck build-ofactest build-examples
+	cd webui/ && npm install && npm run build && cd ../
 
 build-server:
 	CGO_ENABLED=1 go build -o ./bin/server github.com/moov-io/ofac/cmd/server
+
+build-ofaccheck:
+	CGO_ENABLED=0 go build -o ./bin/ofaccheck github.com/moov-io/ofac/cmd/ofaccheck
 
 build-ofactest:
 	CGO_ENABLED=0 go build -o ./bin/ofactest github.com/moov-io/ofac/cmd/ofactest
@@ -25,7 +29,7 @@ client:
 # Versions from https://github.com/OpenAPITools/openapi-generator/releases
 	@chmod +x ./openapi-generator
 	@rm -rf ./client
-	OPENAPI_GENERATOR_VERSION=4.0.1 ./openapi-generator generate -i openapi.yaml -g go -o ./client
+	OPENAPI_GENERATOR_VERSION=4.2.0 ./openapi-generator generate -i openapi.yaml -g go -o ./client
 	rm -f client/go.mod client/go.sum
 	go fmt ./...
 	go build github.com/moov-io/ofac/client
@@ -34,6 +38,7 @@ client:
 .PHONY: clean
 clean:
 	@rm -rf client/
+	@rm -rf bin/
 	@rm -f openapi-generator-cli-*.jar
 
 dist: clean client build
@@ -70,6 +75,16 @@ cover-test:
 	go test -coverprofile=cover.out ./...
 cover-web:
 	go tool cover -html=cover.out
+
+clean-integration:
+	docker-compose kill
+	docker-compose rm -v -f
+
+test-integration: clean-integration
+	docker-compose up -d
+	sleep 10
+	curl -v http://localhost:9094/data/refresh # hangs until download and parsing completes
+	./bin/ofactest -local
 
 # From https://github.com/genuinetools/img
 .PHONY: AUTHORS

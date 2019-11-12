@@ -5,20 +5,24 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 
 	"github.com/moov-io/ofac"
 
 	"github.com/go-kit/kit/log"
 	"github.com/xrash/smetrics"
+	"golang.org/x/text/runes"
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
 )
@@ -29,11 +33,15 @@ var (
 	softResultsLimit, hardResultsLimit = 10, 100
 )
 
+// searcher holds precomputed data for each object available to search against.
+// This data comes from various US Federal agencies, such as: OFAC and BIS
 type searcher struct {
-	SDNs         []*SDN
-	Addresses    []*Address
-	Alts         []*Alt
-	sync.RWMutex // protects all above fields
+	SDNs            []*SDN
+	Addresses       []*Address
+	Alts            []*Alt
+	DPs             []*DP
+	lastRefreshedAt time.Time
+	sync.RWMutex    // protects all above fields
 
 	logger log.Logger
 }
@@ -64,7 +72,7 @@ var (
 		return func(add *Address) *item {
 			return &item{
 				value:  add,
-				weight: jaroWrinkler(add.address, precompute(needleAddr)),
+				weight: jaroWinkler(add.address, precompute(needleAddr)),
 			}
 		}
 	}
@@ -76,7 +84,7 @@ var (
 		return func(add *Address) *item {
 			return &item{
 				value:  add,
-				weight: jaroWrinkler(add.citystate, precompute(needleCityState)),
+				weight: jaroWinkler(add.citystate, precompute(needleCityState)),
 			}
 		}
 	}
@@ -86,7 +94,7 @@ var (
 		return func(add *Address) *item {
 			return &item{
 				value:  add,
-				weight: jaroWrinkler(add.country, precompute(needleCountry)),
+				weight: jaroWinkler(add.country, precompute(needleCountry)),
 			}
 		}
 	}
@@ -174,7 +182,7 @@ func (s *searcher) TopAltNames(limit int, alt string) []Alt {
 	for i := range s.Alts {
 		xs.add(&item{
 			value:  s.Alts[i],
-			weight: jaroWrinkler(s.Alts[i].name, alt),
+			weight: jaroWinkler(s.Alts[i].name, alt),
 		})
 	}
 
@@ -193,16 +201,43 @@ func (s *searcher) TopAltNames(limit int, alt string) []Alt {
 	return out
 }
 
-func (s *searcher) FindSDN(id string) *ofac.SDN {
+func (s *searcher) FindSDN(entityID string) *ofac.SDN {
 	s.RLock()
 	defer s.RUnlock()
 
 	for i := range s.SDNs {
-		if s.SDNs[i].EntityID == id {
+		if s.SDNs[i].EntityID == entityID {
 			return s.SDNs[i].SDN
 		}
 	}
 	return nil
+}
+
+// FindSDNsByRemarksID looks for SDN's whose remarks property contains an ID matching
+// what is provided to this function. It's typically used with values assigned by a local
+// government. (National ID, Drivers License, etc)
+func (s *searcher) FindSDNsByRemarksID(limit int, id string) []SDN {
+	var out []SDN
+	for i := range s.SDNs {
+		// If our remarks ID contains a space then just see if the query ID matches any part.
+		// Otherwise ID searches need to be exact matches.
+		if strings.Contains(s.SDNs[i].id, " ") && strings.Contains(s.SDNs[i].id, id) {
+			sdn := *s.SDNs[i]
+			sdn.match = 1.0
+			out = append(out, sdn)
+		} else {
+			if s.SDNs[i].id == id {
+				sdn := *s.SDNs[i]
+				sdn.match = 1.0
+				out = append(out, sdn)
+			}
+		}
+		// quit if we're at our max result size
+		if len(out) >= limit {
+			return out
+		}
+	}
+	return out
 }
 
 func (s *searcher) TopSDNs(limit int, name string) []SDN {
@@ -219,7 +254,7 @@ func (s *searcher) TopSDNs(limit int, name string) []SDN {
 	for i := range s.SDNs {
 		xs.add(&item{
 			value:  s.SDNs[i],
-			weight: jaroWrinkler(s.SDNs[i].name, name),
+			weight: jaroWinkler(s.SDNs[i].name, name),
 		})
 	}
 
@@ -238,6 +273,39 @@ func (s *searcher) TopSDNs(limit int, name string) []SDN {
 	return out
 }
 
+func (s *searcher) TopDPs(limit int, name string) []DP {
+	name = precompute(name)
+
+	s.RLock()
+	defer s.RUnlock()
+
+	if len(s.DPs) == 0 {
+		return nil
+	}
+	xs := newLargest(limit)
+
+	for _, dp := range s.DPs {
+		xs.add(&item{
+			value:  dp,
+			weight: jaroWinkler(dp.name, name),
+		})
+	}
+
+	out := make([]DP, 0)
+	for _, thisItem := range xs.items {
+		if v := thisItem; v != nil {
+			ss, ok := v.value.(*DP)
+			if !ok {
+				continue
+			}
+			dp := *ss
+			dp.match = v.weight
+			out = append(out, dp)
+		}
+	}
+	return out
+}
+
 // SDN is ofac.SDN wrapped with precomputed search metadata
 type SDN struct {
 	*ofac.SDN
@@ -247,8 +315,16 @@ type SDN struct {
 
 	// name is precomputed for speed
 	name string
+
+	// id is the parseed ID value from an SDN's remarks field. Often this
+	// is a National ID, Drivers License, or similar government value
+	// ueed to uniquely identify an entiy.
+	//
+	// Typically the form of this is 'No. NNNNN' where NNNNN is alphanumeric.
+	id string
 }
 
+// MarshalJSON is a custom method for marshaling a SDN search result
 func (s SDN) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		*ofac.SDN
@@ -265,13 +341,14 @@ func precomputeSDNs(sdns []*ofac.SDN) []*SDN {
 		out[i] = &SDN{
 			SDN:  sdns[i],
 			name: precompute(reorderSDNName(sdns[i].SDNName, sdns[i].SDNType)),
+			id:   extractIDFromRemark(strings.TrimSpace(sdns[i].Remarks)),
 		}
 	}
 	return out
 }
 
 var (
-	surnamePrecedes = regexp.MustCompile(`(,\s?[a-zA-Z]*)$`)
+	surnamePrecedes = regexp.MustCompile(`(,?[\s?a-zA-Z\.]{1,})$`)
 )
 
 // reorderSDNName will take a given SDN name and if it matches a specific pattern where
@@ -285,11 +362,11 @@ func reorderSDNName(name string, tpe string) string {
 	if !strings.EqualFold(tpe, "individual") {
 		return name // only reorder individual names
 	}
-	if v := surnamePrecedes.FindString(name); v == "" {
+	v := surnamePrecedes.FindString(name)
+	if v == "" {
 		return name // no match on 'Doe, John'
-	} else {
-		return strings.TrimSpace(fmt.Sprintf("%s %s", strings.TrimPrefix(v, ","), strings.TrimSuffix(name, v)))
 	}
+	return strings.TrimSpace(fmt.Sprintf("%s %s", strings.TrimPrefix(v, ","), strings.TrimSuffix(name, v)))
 }
 
 // Address is ofac.Address wrapped with precomputed search metadata
@@ -302,6 +379,7 @@ type Address struct {
 	address, citystate, country string
 }
 
+// MarshalJSON is a custom method for marshaling a SDN Address search result
 func (a Address) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		*ofac.Address
@@ -335,6 +413,7 @@ type Alt struct {
 	name string
 }
 
+// MarshalJSON is a custom method for marshaling a SDN Alternate Identity search result
 func (a Alt) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		*ofac.AlternateIdentity
@@ -356,6 +435,35 @@ func precomputeAlts(alts []*ofac.AlternateIdentity) []*Alt {
 	return out
 }
 
+// DP is a BIS Denied Person wrapped with precomputed search metadata
+type DP struct {
+	DeniedPerson *ofac.DPL
+	match        float64
+	name         string
+}
+
+// MarshalJSON is a custom method for marshaling a BIS Denied Person (DP)
+func (d DP) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		*ofac.DPL
+		Match float64 `json:"match"`
+	}{
+		d.DeniedPerson,
+		d.match,
+	})
+}
+
+func precomputeDPs(persons []*ofac.DPL) []*DP {
+	out := make([]*DP, len(persons))
+	for i := range persons {
+		out[i] = &DP{
+			DeniedPerson: persons[i],
+			name:         precompute(persons[i].Name),
+		}
+	}
+	return out
+}
+
 var (
 	punctuationReplacer = strings.NewReplacer(".", "", ",", "", "-", "", "  ", " ")
 )
@@ -367,20 +475,12 @@ var (
 // See: https://godoc.org/golang.org/x/text/unicode/norm#Form
 // See: https://withblue.ink/2019/03/11/why-you-need-to-normalize-unicode-strings.html
 func precompute(s string) string {
-	trimmed := chomp(strings.ToLower(punctuationReplacer.Replace(s)))
+	trimmed := strings.ToLower(punctuationReplacer.Replace(s))
 
 	// UTF-8 normalization
-	t := transform.Chain(norm.NFD, transform.RemoveFunc(isMn), norm.NFC)
+	t := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC) // Mn: nonspacing marks
 	result, _, _ := transform.String(t, trimmed)
 	return result
-}
-
-func isMn(r rune) bool {
-	return unicode.Is(unicode.Mn, r) // Mn: nonspacing marks
-}
-
-func chomp(s string) string {
-	return strings.Replace(s, " ", "", -1)
 }
 
 func extractSearchLimit(r *http.Request) int {
@@ -397,11 +497,78 @@ func extractSearchLimit(r *http.Request) int {
 	return limit
 }
 
-// jaroWrinkler runs the similarly named algorithm over the two input strings.
-// For more details see https://en.wikipedia.org/wiki/Jaro%E2%80%93Winkler_distance
+// jaroWrinkler runs the similarly named algorithm over the two input strings and averages their match percentages
+// according to the second string (assumed to be the user's query)
 //
-// Right now s1 is assumes to have been passed through `chomp(..)` already and so this
-// func only calls `chomp` for s2.
-func jaroWrinkler(s1, s2 string) float64 {
-	return smetrics.JaroWinkler(s1, chomp(s2), 0.7, 4)
+// For more details see https://en.wikipedia.org/wiki/Jaro%E2%80%93Winkler_distance
+func jaroWinkler(s1, s2 string) float64 {
+	maxMatch := func(word string, parts []string) float64 {
+		if len(parts) == 0 {
+			return 0.0
+		}
+		max := smetrics.JaroWinkler(word, parts[0], 0.7, 4)
+		for i := 1; i < len(parts); i++ {
+			if score := smetrics.JaroWinkler(word, parts[i], 0.7, 4); score > max {
+				max = score
+			}
+		}
+		return max
+	}
+
+	s1Parts, s2Parts := strings.Fields(s1), strings.Fields(s2)
+	if len(s1Parts) == 0 || len(s2Parts) == 0 {
+		return 0.0 // avoid returning NaN later on
+	}
+
+	var scores []float64
+	for i := range s1Parts {
+		scores = append(scores, maxMatch(s1Parts[i], s2Parts))
+	}
+
+	// average the highest N scores where N is the words in our query (s2).
+	sort.Float64s(scores)
+	if len(s1Parts) > len(s2Parts) {
+		scores = scores[len(s2Parts)-1:]
+	}
+
+	var sum float64
+	for i := range scores {
+		sum += scores[i]
+	}
+	return sum / float64(len(scores))
+}
+
+// extractIDFromRemark attempts to parse out a National ID or similar governmental ID value
+// from an SDN's remarks property.
+//
+// Typically the form of this is 'No. NNNNN' where NNNNN is alphanumeric.
+func extractIDFromRemark(remarks string) string {
+	if remarks == "" {
+		return ""
+	}
+
+	var out bytes.Buffer
+	parts := strings.Fields(remarks)
+	for i := range parts {
+		if parts[i] == "No." {
+			trimmed := strings.TrimSuffix(strings.TrimSuffix(parts[i+1], "."), ";")
+
+			// Always take the next part
+			if strings.HasSuffix(parts[i+1], ".") || strings.HasSuffix(parts[i+1], ";") {
+				return trimmed
+			} else {
+				out.WriteString(trimmed)
+			}
+			// possibly take additional parts
+			for j := i + 2; j < len(parts); j++ {
+				if strings.HasPrefix(parts[j], "(") {
+					return out.String()
+				}
+				if _, err := strconv.ParseInt(parts[j], 10, 32); err == nil {
+					out.WriteString(" " + parts[j])
+				}
+			}
+		}
+	}
+	return out.String()
 }

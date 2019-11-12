@@ -1,11 +1,11 @@
-FROM golang:1.12-alpine as builder
+FROM golang:1.13-alpine as builder
 RUN apk add -U make git
 RUN adduser -D -g '' --shell /bin/false moov
 
 WORKDIR /go/src/github.com/moov-io/ofac
 COPY . .
 ENV GO111MODULE=on
-run go mod download
+RUN go mod download
 RUN make build-ofactest
 USER moov
 

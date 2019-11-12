@@ -7,23 +7,23 @@ moov-io/ofac
 [![Go Report Card](https://goreportcard.com/badge/github.com/moov-io/ofac)](https://goreportcard.com/report/github.com/moov-io/ofac)
 [![Apache 2 licensed](https://img.shields.io/badge/license-Apache2-blue.svg)](https://raw.githubusercontent.com/moov-io/ofac/master/LICENSE)
 
-[Office of Foreign Asset Control](https://www.treasury.gov/about/organizational-structure/offices/Pages/Office-of-Foreign-Assets-Control.aspx) (OFAC) is an HTTP API and Go library to download, [parse and serve United States OFAC sanction data](https://docs.moov.io/ofac/file-structure/) for applications and humans. Also supported is an async webhook notification service to initiate processes on remote systems connected with OFAC. The US Treasury department offers a [search page for OFAC records](https://sanctionssearch.ofac.treas.gov/).
+[Office of Foreign Asset Control](https://www.treasury.gov/about/organizational-structure/offices/Pages/Office-of-Foreign-Assets-Control.aspx) (OFAC) is an HTTP API and Go library to download, [parse and serve United States OFAC sanction data](https://docs.moov.io/ofac/file-structure/) along with the [BIS Denied Person's List](https://bis.data.commerce.gov/dataset/Denied-Persons-List-with-Denied-US-Export-Privileg/xwtd-wd7a/data) (DPL) for applications and humans. Also supported is an async webhook notification service to initiate processes on remote systems connected with OFAC. The US Treasury department offers a [search page for OFAC records](https://sanctionssearch.ofac.treas.gov/).
 
-All United States companies are required to comply with OFAC regulations and sanction lists. Moov's primary usage for this project is with ACH origination in our [paygate](https://github.com/moov-io/paygate) project.
+All United States companies are required to comply with OFAC regulations and sanction lists and the US Patriot Act requires compliance with the BIS Denied Person's List (DPL). Moov's primary usage for this project is with ACH origination in our [paygate](https://github.com/moov-io/paygate) project.
 
-To get started using OFAC download [the latest release](https://github.com/moov-io/ofac/releases) or our [Docker image](https://hub.docker.com/r/moov/ofac/tags). We also have a [demo OFAC instance](https://moov.io/ofac/) as part of Moov's demo environment.
+To get started using OFAC download [the latest release](https://github.com/moov-io/ofac/releases/latest) or our [Docker image](https://hub.docker.com/r/moov/ofac/tags). We also have a [demo OFAC instance](https://moov.io/ofac/) as part of Moov's demo environment.
 
 ```
 # Run as a binary
-$ wget https://github.com/moov-io/ofac/releases/download/v0.8.0/ofac-darwin-amd64
+$ wget https://github.com/moov-io/ofac/releases/download/v0.10.0/ofac-darwin-amd64
 $ chmod +x ofac-darwin-amd64
 $ ./ofac-darwin-amd64
-ts=2019-02-05T00:03:31.9583844Z caller=main.go:42 startup="Starting ofac server version v0.8.0"
+ts=2019-02-05T00:03:31.9583844Z caller=main.go:42 startup="Starting ofac server version v0.10.0"
 ...
 
 # Run as a Docker image
 $ docker run -p 8084:8084 -p 9094:9094 -it moov/ofac:latest
-ts=2019-02-05T00:03:31.9583844Z caller=main.go:42 startup="Starting ofac server version v0.8.0"
+ts=2019-02-05T00:03:31.9583844Z caller=main.go:42 startup="Starting ofac server version v0.10.0"
 ...
 
 # Perform a basic search
@@ -46,7 +46,8 @@ $ curl -s localhost:8084/search?name=...
     }
   ],
   "altNames": null,
-  "addresses": null
+  "addresses": null,
+  "deniedPersons": null
 }
 ```
 
@@ -54,23 +55,71 @@ We offer [hosted api docs as part of Moov's tools](https://api.moov.io/#tag/OFAC
 
 Docs: [docs.moov.io](https://docs.moov.io/ofac/) | [api docs](https://api.moov.io/apps/ofac/)
 
+### Web UI
+
+OFAC ships with a web interface for easier access searching the records. Our Docker image hosts the UI by default, but you can build and run it locally as well.
+
+![](docs/images/webui.png)
+
+```
+$ make
+...
+CGO_ENABLED=1 go build -o ./bin/server github.com/moov-io/ofac/cmd/server
+...
+npm run build
+...
+Success!
+
+$ go run ./cmd/server/ # Load http://localhost:8084 in a web browser
+```
+
 ### Configuration
 
 | Environmental Variable | Description | Default |
 |-----|-----|-----|
-| `OFAC_DATA_REFRESH` | Interval for OFAC data redownload and reparse. | 12h |
+| `OFAC_DATA_REFRESH` | Interval for OFAC data redownload and reparse. `off` disables this refreshing. | 12h |
 | `OFAC_DOWNLOAD_TEMPLATE` | HTTP address for downloading raw OFAC files. | (OFAC website) |
-| `SQLITE_DB_PATH`| Local filepath location for the paygate SQLite database. | `ofac.db` |
+| `DPL_DOWNLOAD_TEMPLATE` | HTTP address for downloading the DPL | (BIS website) |
+| `INITIAL_DATA_DIRECTORY` | Directory filepath with initial files to use instead of downloading. Periodic downloads will replace the initial files. | Empty |
 | `WEBHOOK_BATCH_SIZE` | How many watches to read from database per batch of async searches. | 100 |
+| `LOG_FORMAT` | Format for logging lines to be written as. | Options: `json`, `plain` - Default: `plain` |
+| `BASE_PATH` | HTTP path to serve API and web UI from. | `/` |
+| `HTTP_BIND_ADDRESS` | Address for OFAC to bind its HTTP server on. This overrides the command-line flag `-http.addr`. | Default: `:8084` |
+| `HTTP_ADMIN_BIND_ADDRESS` | Address for OFAC to bind its admin HTTP server on. This overrides the command-line flag `-admin.addr`. | Default: `:9094` |
+| `HTTPS_CERT_FILE` | Filepath containing a certificate (or intermediate chain) to be served by the HTTP server. Requires all traffic be over secure HTTP. | Empty |
+| `HTTPS_KEY_FILE`  | Filepath of a private key matching the leaf certificate from `HTTPS_CERT_FILE`. | Empty |
+| `DATABASE_TYPE` | Which database option to use (Options: `sqlite`, `mysql`) | Default: `sqlite` |
+| `WEB_ROOT` | Directory to serve web UI from | Default: `examples/ofac-search-ui/build/` |
+
+#### Storage
+
+Based on `DATABASE_TYPE` the following environment variables will be read to configure connections for a specific database.
+
+##### MySQL
+
+- `MYSQL_ADDRESS`: TCP address for connecting to the mysql server. (example: `tcp(hostname:3306)`)
+- `MYSQL_DATABASE`: Name of database to connect into.
+- `MYSQL_PASSWORD`: Password of user account for authentication.
+- `MYSQL_USER`: Username used for authentication,
+
+Refer to the mysql driver documentation for [connection parameters](https://github.com/go-sql-driver/mysql#dsn-data-source-name).
+
+- `MYSQL_TIMEOUT`: Timeout parameter specified on (DSN) data source name. (Default: `30s`)
+
+##### SQLite
+
+- `SQLITE_DB_PATH`: Local filepath location for the paygate SQLite database. (Default: `ofac.db`)
+
+Refer to the sqlite driver documentation for [connection parameters](https://github.com/mattn/go-sqlite3#connection-string).
 
 ### Features
 
-- Download OFAC data on startup
-  - Admin endpoint to [manually refresh OFAC data](docs/runbook.md#force-ofac-data-refresh)
+- Download OFAC and BIS Denied Persons List (DPL) data on startup
+  - Admin endpoint to [manually refresh OFAC and DPL data](docs/runbook.md#force-data-refresh)
 - Index data for searches
 - Async searches and notifications (webhooks)
 - Manual overrides to mark a `Company` or `Customer` as `unsafe` (blocked) or `exception` (never blocked).
-- Library to download and parse OFAC files
+- Library for OFAC and BIS DPL data to download and parse their custom files
 
 #### Webhook Notifications
 
@@ -87,6 +136,12 @@ OFAC supports sending a webhook periodically when a specific [Company](https://a
 ##### Watching a customer or company name
 
 OFAC supports sending a webhook periodically with a free-form name of a [Company](https://api.moov.io/#operation/addCompanyNameWatch) or [Customer](https://api.moov.io/#operation/addCustomerNameWatch). This allows external applications to be notified when an entity matching that name is added to the OFAC list. The match percentage will be included in the JSON payload.
+
+##### Prometheus Metrics
+
+- `http_response_duration_seconds`: A Histogram of HTTP response timings
+- `ofac_match_percentages` A Histogram which holds the match percentages with a label (`type`) of searches
+   - `type`: Can be address, q, remarksID, name, altName
 
 ## Getting Help
 
@@ -111,6 +166,7 @@ Note: This project uses Go Modules, which requires Go 1.11 or higher, but we shi
 - [Sanctions Search Page](https://sanctionssearch.ofac.treas.gov/)
 - [Subscribe for OFAC updates](https://service.govdelivery.com/accounts/USTREAS/subscriber/new)
 - [When should I call the OFAC Hotline?](https://www.treasury.gov/resource-center/faqs/Sanctions/Pages/directions.aspx)
+- [BIS Denied Persons List with Denied US Export Privileges](https://bis.data.commerce.gov/dataset/Denied-Persons-List-with-Denied-US-Export-Privileg/xwtd-wd7a/data)
 
 ## License
 
